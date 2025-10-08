@@ -1,5 +1,8 @@
-import sys
-sys.modules['audioop'] = None
+import sys, types
+try:
+    import audioop
+except ImportError:
+    sys.modules['audioop'] = types.ModuleType('audioop')
 import discord
 from discord.ext import commands
 import json
