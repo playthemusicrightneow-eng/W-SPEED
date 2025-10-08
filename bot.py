@@ -1,11 +1,27 @@
 import discord
 from discord.ext import commands
+from flask import Flask 
 import json
 import aiosqlite
 import os
 import asyncio
 from datetime import datetime, timedelta
 from collections import defaultdict
+
+# --- Fake web server for Render ---
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+def run_web():
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
+
+def keep_alive():
+    t = threading.Thread(target=run_web)
+    t.start()
 
 OWNER_ID = 728201873366056992
 DEFAULT_ALERT_USERS = {728201873366056992, 1063630678106853436}
