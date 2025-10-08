@@ -461,7 +461,6 @@ async def on_command_error(ctx, error):
         print(f"Error: {error}")
 
 if __name__ == '__main__':
-    import asyncio
     
     async def main():
         async with bot:
