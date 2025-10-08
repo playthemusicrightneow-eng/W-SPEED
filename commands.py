@@ -1,8 +1,3 @@
-import sys, types
-try:
-    import audioop
-except ImportError:
-    sys.modules['audioop'] = types.ModuleType('audioop')
 import discord
 from discord.ext import commands
 import json
@@ -543,6 +538,3 @@ async def setup(bot):
     await bot.add_cog(GuardianCommands(bot))
     await bot.add_cog(BackupCommands(bot))
     await bot.add_cog(WhitelistCommands(bot))
-
-token = os.getenv('DISCORD_BOT_TOKEN')
-bot.run(token)
