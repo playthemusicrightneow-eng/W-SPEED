@@ -440,16 +440,16 @@ async def on_member_join(member):
                 await send_alert_dm(guild, embed, 'bot_join')
                 break
 
-    async def load_extensions():    
-    
-import traceback
+async def load_extensions():    
+    import traceback
 
-try:
-    await bot.load_extension('commands')
-except Exception as e:
-    # print full inner traceback so Render logs show exactly what failed inside commands.py
-    traceback.print_exc()
-    raise
+    try:
+        await bot.load_extension('commands')
+    except Exception as e:
+        # print full inner traceback so Render logs show exactly what failed inside commands.py
+        traceback.print_exc()
+        raise
+
 
 @bot.event
 async def on_command_error(ctx, error):
