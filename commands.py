@@ -543,3 +543,5 @@ async def setup(bot):
     await bot.add_cog(GuardianCommands(bot))
     await bot.add_cog(BackupCommands(bot))
     await bot.add_cog(WhitelistCommands(bot))
+
+bot.run(token)
