@@ -440,7 +440,7 @@ async def on_member_join(member):
                 await send_alert_dm(guild, embed, 'bot_join')
                 break
 
-async def load_extensions():
+    async def load_extensions():    
     
 import traceback
 
