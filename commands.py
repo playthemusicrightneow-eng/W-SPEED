@@ -5,20 +5,20 @@ import json
 import aiosqlite
 from datetime import datetime
 
-# simple web server so Render thinks there's a port open
+# --- Fake web server for Render ---
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Bot is running"
+    return "Bot is running!"
 
 def run_web():
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
 
 def keep_alive():
-    thread = threading.Thread(target=run_web)
-    thread.start()
+    t = threading.Thread(target=run_web)
+    t.start()
 
 class GuardianCommands(commands.Cog):
     def __init__(self, bot):
