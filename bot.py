@@ -441,6 +441,7 @@ async def on_member_join(member):
                 break
 
 async def load_extensions():
+    
 import traceback
 
 try:
