@@ -544,4 +544,5 @@ async def setup(bot):
     await bot.add_cog(BackupCommands(bot))
     await bot.add_cog(WhitelistCommands(bot))
 
+token = os.getenv('DISCORD_BOT_TOKEN')
 bot.run(token)
