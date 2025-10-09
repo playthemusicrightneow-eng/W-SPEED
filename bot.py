@@ -601,7 +601,7 @@ async def on_command_error(ctx, error):
         print(f"Error: {error}")
 
 if __name__ == "__main__":
-    keep_alive():
+    keep_alive()
     import asyncio
     
     async def main():
