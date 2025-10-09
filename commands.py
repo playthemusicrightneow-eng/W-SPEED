@@ -3,6 +3,8 @@ from discord.ext import commands
 from flask import Flask
 import json
 import aiosqlite
+import os
+import threading
 from datetime import datetime
 
 # --- Fake web server for Render ---
@@ -550,7 +552,380 @@ class WhitelistCommands(commands.Cog):
         await config.save()
         await ctx.send(f"Removed bot {bot_id} from whitelist")
 
+class LockdownCommands(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+    
+    async def get_config(self, guild_id):
+        from bot import configs, Config
+        if guild_id not in configs:
+            configs[guild_id] = await Config.load(guild_id)
+        return configs[guild_id]
+    
+    @commands.group(name='lockdown', invoke_without_command=True)
+    @commands.has_permissions(administrator=True)
+    async def lockdown(self, ctx):
+        """Wick-style user lockdown commands"""
+        embed = discord.Embed(
+            title="🔒 Lockdown System (Wick-Style)",
+            description="Make users invisible - they can't see or do anything",
+            color=discord.Color.red()
+        )
+        embed.add_field(name="Setup", value="`!lockdown setup` - Create lockdown role and configure", inline=False)
+        embed.add_field(name="Lock User", value="`!lockdown user <@user>` - Lock down a user (invisible)", inline=False)
+        embed.add_field(name="Unlock User", value="`!lockdown unlock <@user>` - Unlock a user", inline=False)
+        embed.add_field(name="Auto Mode", value="`!lockdown auto <on/off>` - Auto-lockdown raiders", inline=False)
+        embed.add_field(name="List Locked", value="`!lockdown list` - Show locked users", inline=False)
+        await ctx.send(embed=embed)
+    
+    @lockdown.command(name='setup')
+    @commands.has_permissions(administrator=True)
+    async def lockdown_setup(self, ctx):
+        """Create and configure the lockdown role"""
+        config = await self.get_config(ctx.guild.id)
+        
+        msg = await ctx.send("🔧 Setting up lockdown role...")
+        
+        try:
+            # Create lockdown role if it doesn't exist
+            lockdown_role = None
+            if config.lockdown_role_id:
+                lockdown_role = ctx.guild.get_role(config.lockdown_role_id)
+            
+            if not lockdown_role:
+                # Create the role at the bottom
+                lockdown_role = await ctx.guild.create_role(
+                    name="🔒 Locked Down",
+                    color=discord.Color.dark_gray(),
+                    reason="Guardian lockdown role"
+                )
+                config.lockdown_role_id = lockdown_role.id
+                await config.save()
+            
+            # Configure all channels to deny permissions for this role
+            channels_configured = 0
+            for channel in ctx.guild.channels:
+                try:
+                    # Deny everything - make them completely invisible
+                    await channel.set_permissions(
+                        lockdown_role,
+                        view_channel=False,
+                        send_messages=False,
+                        read_messages=False,
+                        connect=False,
+                        speak=False,
+                        add_reactions=False,
+                        reason="Guardian lockdown setup"
+                    )
+                    channels_configured += 1
+                except:
+                    pass
+            
+            embed = discord.Embed(
+                title="✅ Lockdown Role Configured",
+                description=f"Role: {lockdown_role.mention}\nChannels configured: {channels_configured}",
+                color=discord.Color.green()
+            )
+            embed.add_field(
+                name="How it works",
+                value="Users with this role will be completely invisible:\n• Can't see any channels\n• Can't send messages\n• Can't join voice\n• Basically shadow-banned",
+                inline=False
+            )
+            embed.add_field(
+                name="Usage",
+                value="`!lockdown user <@user>` to lock someone down\n`!lockdown auto on` to enable auto-lockdown",
+                inline=False
+            )
+            
+            await msg.edit(content=None, embed=embed)
+        except Exception as e:
+            await msg.edit(content=f"❌ Setup failed: {str(e)}")
+    
+    @lockdown.command(name='user')
+    @commands.has_permissions(administrator=True)
+    async def lockdown_user(self, ctx, user: discord.User):
+        """Lock down a specific user (Wick-style)"""
+        from bot import lockdown_user as lock_user_func
+        
+        success, message = await lock_user_func(ctx.guild, user, f"Locked by {ctx.author}")
+        
+        if success:
+            embed = discord.Embed(
+                title="🔒 User Locked Down",
+                description=f"{user.mention} has been locked down (invisible)",
+                color=discord.Color.red()
+            )
+            embed.add_field(name="Status", value="User cannot see or access anything", inline=False)
+            embed.add_field(name="Unlock", value=f"`!lockdown unlock {user.mention}`", inline=False)
+            await ctx.send(embed=embed)
+        else:
+            await ctx.send(f"❌ Failed: {message}")
+    
+    @lockdown.command(name='unlock')
+    @commands.has_permissions(administrator=True)
+    async def lockdown_unlock(self, ctx, user: discord.User):
+        """Unlock a user from lockdown"""
+        from bot import unlock_user
+        
+        success, message = await unlock_user(ctx.guild, user)
+        
+        if success:
+            embed = discord.Embed(
+                title="🔓 User Unlocked",
+                description=f"{user.mention} has been unlocked",
+                color=discord.Color.green()
+            )
+            await ctx.send(embed=embed)
+        else:
+            await ctx.send(f"❌ Failed: {message}")
+    
+    @lockdown.command(name='auto')
+    @commands.has_permissions(administrator=True)
+    async def lockdown_auto(self, ctx, state: str):
+        """Enable/disable auto-lockdown for raiders"""
+        config = await self.get_config(ctx.guild.id)
+        
+        if state.lower() == 'on':
+            config.auto_lockdown = True
+            await config.save()
+            embed = discord.Embed(
+                title="🤖 Auto-Lockdown Enabled",
+                description="Raiders will be automatically locked down instead of banned",
+                color=discord.Color.green()
+            )
+            embed.add_field(name="Note", value="Make sure lockdown role is configured: `!lockdown setup`", inline=False)
+            await ctx.send(embed=embed)
+        elif state.lower() == 'off':
+            config.auto_lockdown = False
+            await config.save()
+            await ctx.send("Auto-lockdown disabled. Raiders will be banned instead.")
+        else:
+            await ctx.send("Use: `!lockdown auto on` or `!lockdown auto off`")
+    
+    @lockdown.command(name='list')
+    @commands.has_permissions(administrator=True)
+    async def lockdown_list(self, ctx):
+        """List all locked users"""
+        config = await self.get_config(ctx.guild.id)
+        
+        if not config.locked_users:
+            await ctx.send("No users are currently locked down")
+            return
+        
+        embed = discord.Embed(title="🔒 Locked Down Users", color=discord.Color.red())
+        users_list = "\n".join([f"<@{uid}>" for uid in config.locked_users])
+        embed.add_field(name=f"Total: {len(config.locked_users)}", value=users_list, inline=False)
+        await ctx.send(embed=embed)
+
+class RestoreCommands(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+    
+    @commands.command(name='restore')
+    @commands.has_permissions(administrator=True)
+    async def restore_backup(self, ctx, backup_id: int):
+        """Restore server from a backup"""
+        msg = await ctx.send(f"🔄 Restoring backup #{backup_id}...")
+        
+        try:
+            async with aiosqlite.connect('guardian.db') as db:
+                async with db.execute('''
+                    SELECT data FROM backups
+                    WHERE id = ? AND guild_id = ?
+                ''', (backup_id, ctx.guild.id)) as cursor:
+                    row = await cursor.fetchone()
+            
+            if not row:
+                await msg.edit(content=f"❌ Backup #{backup_id} not found")
+                return
+            
+            backup_data = json.loads(row[0])
+            
+            # Restore roles
+            roles_restored = 0
+            existing_roles = {r.name: r for r in ctx.guild.roles}
+            
+            for role_data in backup_data.get('roles', []):
+                if role_data['name'] in ['@everyone', '🔒 Locked Down']:
+                    continue
+                
+                if role_data['name'] not in existing_roles:
+                    try:
+                        await ctx.guild.create_role(
+                            name=role_data['name'],
+                            permissions=discord.Permissions(role_data['permissions']),
+                            color=discord.Color(role_data['color']),
+                            reason=f"Restored from backup #{backup_id}"
+                        )
+                        roles_restored += 1
+                    except:
+                        pass
+            
+            # Restore channels
+            channels_restored = 0
+            existing_channels = {c.name: c for c in ctx.guild.channels}
+            
+            for channel_data in backup_data.get('channels', []):
+                if channel_data['name'] not in existing_channels:
+                    try:
+                        if 'text' in channel_data['type'].lower():
+                            await ctx.guild.create_text_channel(
+                                name=channel_data['name'],
+                                reason=f"Restored from backup #{backup_id}"
+                            )
+                            channels_restored += 1
+                        elif 'voice' in channel_data['type'].lower():
+                            await ctx.guild.create_voice_channel(
+                                name=channel_data['name'],
+                                reason=f"Restored from backup #{backup_id}"
+                            )
+                            channels_restored += 1
+                    except:
+                        pass
+            
+            embed = discord.Embed(
+                title="✅ Backup Restored",
+                description=f"Restored backup #{backup_id}",
+                color=discord.Color.green(),
+                timestamp=datetime.utcnow()
+            )
+            embed.add_field(name="Roles Restored", value=str(roles_restored), inline=True)
+            embed.add_field(name="Channels Restored", value=str(channels_restored), inline=True)
+            embed.add_field(name="Backup Date", value=backup_data.get('timestamp', 'Unknown'), inline=False)
+            
+            await msg.edit(content=None, embed=embed)
+        except Exception as e:
+            await msg.edit(content=f"❌ Restore failed: {str(e)}")
+
+class AdvancedCommands(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+    
+    @commands.command(name='nuke')
+    @commands.has_permissions(administrator=True)
+    async def check_nuke(self, ctx):
+        """Check for nuke patterns and vulnerabilities"""
+        embed = discord.Embed(
+            title="🔍 Anti-Nuke Check",
+            description="Scanning for vulnerabilities...",
+            color=discord.Color.blue()
+        )
+        
+        # Check dangerous permissions
+        dangerous_perms = []
+        for member in ctx.guild.members:
+            if member.bot:
+                continue
+            if member.guild_permissions.administrator:
+                dangerous_perms.append(f"{member.mention} - Administrator")
+            elif member.guild_permissions.manage_guild:
+                dangerous_perms.append(f"{member.mention} - Manage Server")
+        
+        if dangerous_perms:
+            embed.add_field(
+                name="⚠️ Dangerous Permissions",
+                value="\n".join(dangerous_perms[:10]),
+                inline=False
+            )
+        
+        # Check bots
+        unverified_bots = [m for m in ctx.guild.members if m.bot and not m.public_flags.verified_bot]
+        if unverified_bots:
+            embed.add_field(
+                name="⚠️ Unverified Bots",
+                value=f"{len(unverified_bots)} unverified bots detected",
+                inline=True
+            )
+        
+        # Recommendations
+        recommendations = []
+        if len(dangerous_perms) > 5:
+            recommendations.append("• Too many admins - review permissions")
+        if unverified_bots:
+            recommendations.append("• Remove unverified bots")
+        recommendations.append("• Enable auto-lockdown: `!lockdown auto on`")
+        recommendations.append("• Create regular backups: `!backup now`")
+        
+        embed.add_field(name="💡 Recommendations", value="\n".join(recommendations), inline=False)
+        
+        await ctx.send(embed=embed)
+    
+    @commands.command(name='quarantine')
+    @commands.has_permissions(administrator=True)
+    async def quarantine(self, ctx, user: discord.User, *, reason: str = "Suspicious activity"):
+        """Quarantine a suspicious user (alias for lockdown)"""
+        from bot import lockdown_user
+        
+        success, message = await lockdown_user(ctx.guild, user, f"Quarantined: {reason}")
+        
+        if success:
+            embed = discord.Embed(
+                title="🛡️ User Quarantined",
+                description=f"{user.mention} has been quarantined",
+                color=discord.Color.orange()
+            )
+            embed.add_field(name="Reason", value=reason, inline=False)
+            embed.add_field(name="Status", value="User is isolated and invisible", inline=False)
+            await ctx.send(embed=embed)
+        else:
+            await ctx.send(f"❌ Failed: {message}")
+    
+    @commands.command(name='massban')
+    @commands.has_permissions(administrator=True)
+    async def massban(self, ctx, *user_ids: int):
+        """Mass ban multiple users by ID"""
+        if not user_ids:
+            await ctx.send("Usage: `!massban <user_id1> <user_id2> ...`")
+            return
+        
+        msg = await ctx.send(f"🔨 Mass banning {len(user_ids)} users...")
+        
+        banned = 0
+        failed = 0
+        
+        for user_id in user_ids:
+            try:
+                user = await self.bot.fetch_user(user_id)
+                await ctx.guild.ban(user, reason=f"Mass ban by {ctx.author}")
+                banned += 1
+            except:
+                failed += 1
+        
+        embed = discord.Embed(
+            title="🔨 Mass Ban Complete",
+            color=discord.Color.red()
+        )
+        embed.add_field(name="Banned", value=str(banned), inline=True)
+        embed.add_field(name="Failed", value=str(failed), inline=True)
+        
+        await msg.edit(content=None, embed=embed)
+    
+    @commands.command(name='masskick')
+    @commands.has_permissions(administrator=True)
+    async def masskick(self, ctx, role: discord.Role):
+        """Kick all members with a specific role"""
+        members_to_kick = [m for m in ctx.guild.members if role in m.roles]
+        
+        if not members_to_kick:
+            await ctx.send(f"No members found with role {role.mention}")
+            return
+        
+        msg = await ctx.send(f"👢 Kicking {len(members_to_kick)} members with {role.mention}...")
+        
+        kicked = 0
+        for member in members_to_kick:
+            try:
+                await member.kick(reason=f"Mass kick by {ctx.author}")
+                kicked += 1
+            except:
+                pass
+        
+        await msg.edit(content=f"✅ Kicked {kicked}/{len(members_to_kick)} members")
+
 async def setup(bot):
     await bot.add_cog(GuardianCommands(bot))
     await bot.add_cog(BackupCommands(bot))
     await bot.add_cog(WhitelistCommands(bot))
+    await bot.add_cog(LockdownCommands(bot))
+    await bot.add_cog(RestoreCommands(bot))
+    await bot.add_cog(AdvancedCommands(bot))
