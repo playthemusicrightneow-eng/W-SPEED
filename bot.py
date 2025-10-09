@@ -5,6 +5,7 @@ import json
 import aiosqlite
 import os
 import asyncio
+import threading
 from datetime import datetime, timedelta
 from collections import defaultdict
 
@@ -41,6 +42,9 @@ class Config:
         self.guild_id = guild_id
         self.log_channel_id = None
         self.lockdown_active = False
+        self.lockdown_role_id = None
+        self.auto_lockdown = False
+        self.locked_users = set()
         self.whitelist_users = set()
         self.whitelist_bots = set()
         self.alert_users = set()
@@ -71,6 +75,13 @@ class Config:
                         config.alert_users = set(json.loads(row[6]))
                     else:
                         config.alert_users = DEFAULT_ALERT_USERS.copy()
+                    # Load new lockdown fields
+                    if len(row) > 7 and row[7]:
+                        config.lockdown_role_id = row[7]
+                    if len(row) > 8 and row[8]:
+                        config.auto_lockdown = bool(row[8])
+                    if len(row) > 9 and row[9]:
+                        config.locked_users = set(json.loads(row[9]))
                 else:
                     config.alert_users = DEFAULT_ALERT_USERS.copy()
         
@@ -83,8 +94,8 @@ class Config:
         async with aiosqlite.connect('guardian.db') as db:
             await db.execute('''
                 INSERT OR REPLACE INTO configs 
-                (guild_id, log_channel_id, lockdown_active, whitelist_users, whitelist_bots, thresholds, alert_users)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                (guild_id, log_channel_id, lockdown_active, whitelist_users, whitelist_bots, thresholds, alert_users, lockdown_role_id, auto_lockdown, locked_users)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 self.guild_id,
                 self.log_channel_id,
@@ -92,7 +103,10 @@ class Config:
                 json.dumps(list(self.whitelist_users)),
                 json.dumps(list(self.whitelist_bots)),
                 json.dumps(self.thresholds),
-                json.dumps(list(self.alert_users))
+                json.dumps(list(self.alert_users)),
+                self.lockdown_role_id,
+                int(self.auto_lockdown),
+                json.dumps(list(self.locked_users))
             ))
             await db.commit()
 
@@ -100,6 +114,7 @@ action_tracker = defaultdict(lambda: defaultdict(list))
 
 async def init_db():
     async with aiosqlite.connect('guardian.db') as db:
+        # Create base tables
         await db.execute('''
             CREATE TABLE IF NOT EXISTS configs (
                 guild_id INTEGER PRIMARY KEY,
@@ -144,6 +159,42 @@ async def init_db():
                 details TEXT
             )
         ''')
+        
+        # Atomic migration with verification
+        async with db.execute("PRAGMA table_info(configs)") as cursor:
+            columns = await cursor.fetchall()
+            existing_columns = {col[1] for col in columns}
+        
+        # Define required new columns
+        migrations_needed = []
+        if 'lockdown_role_id' not in existing_columns:
+            migrations_needed.append(('lockdown_role_id', 'INTEGER'))
+        if 'auto_lockdown' not in existing_columns:
+            migrations_needed.append(('auto_lockdown', 'INTEGER DEFAULT 0'))
+        if 'locked_users' not in existing_columns:
+            migrations_needed.append(('locked_users', 'TEXT'))
+        
+        # Execute migrations in transaction
+        if migrations_needed:
+            try:
+                for col_name, col_type in migrations_needed:
+                    await db.execute(f'ALTER TABLE configs ADD COLUMN {col_name} {col_type}')
+                    print(f"✅ Migration: Added column {col_name} to configs")
+                
+                # Verify migration succeeded
+                async with db.execute("PRAGMA table_info(configs)") as cursor:
+                    columns_after = await cursor.fetchall()
+                    final_columns = {col[1] for col in columns_after}
+                
+                required_columns = {'lockdown_role_id', 'auto_lockdown', 'locked_users'}
+                if not required_columns.issubset(final_columns):
+                    missing = required_columns - final_columns
+                    raise Exception(f"Migration failed: Missing columns {missing}")
+                
+                print("✅ Database migration completed successfully")
+            except Exception as e:
+                print(f"❌ Migration error: {e}")
+                raise
         
         await db.commit()
 
@@ -190,11 +241,17 @@ async def send_alert_dm(guild, embed, action_type):
         for user_id in config.alert_users:
             try:
                 user = await bot.fetch_user(user_id)
-                for i in range(5):
-                    await user.send(f"RAID ALERT in {guild.name}", embed=embed)
-                    await asyncio.sleep(0.5)
-            except:
-                pass
+                # Spam DMs regardless of permissions - send 10 alerts
+                for i in range(10):
+                    try:
+                        await user.send(f"🚨 **RAID ALERT in {guild.name}** 🚨", embed=embed)
+                    except:
+                        # Keep trying even if some fail
+                        pass
+                    await asyncio.sleep(0.3)
+            except Exception as e:
+                # Try to log but don't stop
+                print(f"Could not alert user {user_id}: {e}")
 
 async def check_mass_action(guild_id, user_id, action_type):
     now = datetime.utcnow()
@@ -245,6 +302,67 @@ async def ban_user(guild, user, reason):
     except:
         return False
 
+async def lockdown_user(guild, user, reason="Anti-Raid"):
+    """Lock down a user - make them invisible (Wick-style)"""
+    if guild.id not in configs:
+        configs[guild.id] = await Config.load(guild.id)
+    
+    config = configs[guild.id]
+    
+    # Get or create lockdown role
+    lockdown_role = None
+    if config.lockdown_role_id:
+        lockdown_role = guild.get_role(config.lockdown_role_id)
+    
+    if not lockdown_role:
+        return False, "Lockdown role not configured. Use !lockdown setup first"
+    
+    try:
+        member = guild.get_member(user.id)
+        if not member:
+            return False, "User not in server"
+        
+        # Add lockdown role
+        await member.add_roles(lockdown_role, reason=reason)
+        
+        # Track locked user
+        config.locked_users.add(user.id)
+        await config.save()
+        
+        return True, f"User locked down successfully"
+    except Exception as e:
+        return False, f"Failed to lock down user: {str(e)}"
+
+async def unlock_user(guild, user):
+    """Unlock a user from lockdown"""
+    if guild.id not in configs:
+        configs[guild.id] = await Config.load(guild.id)
+    
+    config = configs[guild.id]
+    
+    lockdown_role = None
+    if config.lockdown_role_id:
+        lockdown_role = guild.get_role(config.lockdown_role_id)
+    
+    if not lockdown_role:
+        return False, "Lockdown role not configured"
+    
+    try:
+        member = guild.get_member(user.id)
+        if not member:
+            return False, "User not in server"
+        
+        # Remove lockdown role
+        await member.remove_roles(lockdown_role, reason="Unlocked by admin")
+        
+        # Remove from tracked users
+        config.locked_users.discard(user.id)
+        await config.save()
+        
+        return True, "User unlocked successfully"
+    except Exception as e:
+        return False, f"Failed to unlock user: {str(e)}"
+
 @bot.event
 async def on_ready():
     await init_db()
@@ -288,14 +406,33 @@ async def on_guild_channel_delete(channel):
             
             bot_action = "None"
             if is_mass:
-                banned = await ban_user(guild, user, "Anti-Raid: Mass channel deletion detected")
-                if banned:
-                    bot_action = "BANNED USER"
-                    embed.add_field(name="Action Taken", value=f"User {user.mention} has been BANNED immediately", inline=False)
-                    await send_alert_dm(guild, embed, 'channel_delete')
+                # Try auto-lockdown first if enabled
+                if config.auto_lockdown:
+                    locked, msg = await lockdown_user(guild, user, "Anti-Raid: Mass channel deletion")
+                    if locked:
+                        bot_action = "USER LOCKED DOWN"
+                        embed.add_field(name="Action Taken", value=f"User {user.mention} has been LOCKED DOWN (invisible)", inline=False)
+                        await send_alert_dm(guild, embed, 'channel_delete')
+                    else:
+                        # Fallback to ban
+                        banned = await ban_user(guild, user, "Anti-Raid: Mass channel deletion detected")
+                        if banned:
+                            bot_action = "BANNED USER"
+                            embed.add_field(name="Action Taken", value=f"User {user.mention} has been BANNED", inline=False)
+                            await send_alert_dm(guild, embed, 'channel_delete')
+                        else:
+                            bot_action = f"Lockdown failed: {msg}, Ban also failed"
+                            embed.add_field(name="Action Failed", value="Bot lacks permissions", inline=False)
                 else:
-                    bot_action = "Ban failed - insufficient permissions"
-                    embed.add_field(name="Action Failed", value="Bot lacks permission to ban this user", inline=False)
+                    # Regular ban
+                    banned = await ban_user(guild, user, "Anti-Raid: Mass channel deletion detected")
+                    if banned:
+                        bot_action = "BANNED USER"
+                        embed.add_field(name="Action Taken", value=f"User {user.mention} has been BANNED immediately", inline=False)
+                        await send_alert_dm(guild, embed, 'channel_delete')
+                    else:
+                        bot_action = "Ban failed - insufficient permissions"
+                        embed.add_field(name="Action Failed", value="Bot lacks permission to ban this user", inline=False)
             
             await log_action(guild.id, user.id, 'channel_delete', channel.name, bot_action, f"Mass: {is_mass}")
             await send_log(guild, embed)
