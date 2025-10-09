@@ -600,18 +600,16 @@ async def on_command_error(ctx, error):
     else:
         print(f"Error: {error}")
 
-if __name__ == '__main__':
-    keep_alive()
-    import asyncio
-    
-    async def main():
-        async with bot:
-            await load_extensions()
-            token = os.getenv('DISCORD_BOT_TOKEN')
-            if not token:
-                print("Error: DISCORD_BOT_TOKEN environment variable not set!")
-                print("Please add your Discord bot token using the Secrets tab")
-                return
-            await bot.start(token)
-    
+from keep_alive import keep_alive
+import os
+
+keep_alive()
+
+import asyncio
+
+async def main():
+    await bot.start(os.getenv("TOKEN"))
+
+if __name__ == "__main__":
     asyncio.run(main())
+
