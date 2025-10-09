@@ -567,8 +567,8 @@ class LockdownCommands(commands.Cog):
     async def lockdown(self, ctx):
         """Wick-style user lockdown commands"""
         embed = discord.Embed(
-            title="🔒 Lockdown System (Wick-Style)",
-            description="Make users invisible - they can't see or do anything",
+            title=" Lockdown System",
+            description="Make users invisible",
             color=discord.Color.red()
         )
         embed.add_field(name="Setup", value="`!lockdown setup` - Create lockdown role and configure", inline=False)
@@ -584,7 +584,7 @@ class LockdownCommands(commands.Cog):
         """Create and configure the lockdown role"""
         config = await self.get_config(ctx.guild.id)
         
-        msg = await ctx.send("🔧 Setting up lockdown role...")
+        msg = await ctx.send(" Setting up lockdown role...")
         
         try:
             # Create lockdown role if it doesn't exist
@@ -595,7 +595,7 @@ class LockdownCommands(commands.Cog):
             if not lockdown_role:
                 # Create the role at the bottom
                 lockdown_role = await ctx.guild.create_role(
-                    name="🔒 Locked Down",
+                    name=" Locked Down",
                     color=discord.Color.dark_gray(),
                     reason="Guardian lockdown role"
                 )
@@ -622,7 +622,7 @@ class LockdownCommands(commands.Cog):
                     pass
             
             embed = discord.Embed(
-                title="✅ Lockdown Role Configured",
+                title=" Lockdown Role Configured",
                 description=f"Role: {lockdown_role.mention}\nChannels configured: {channels_configured}",
                 color=discord.Color.green()
             )
@@ -639,7 +639,7 @@ class LockdownCommands(commands.Cog):
             
             await msg.edit(content=None, embed=embed)
         except Exception as e:
-            await msg.edit(content=f"❌ Setup failed: {str(e)}")
+            await msg.edit(content=f" Setup failed: {str(e)}")
     
     @lockdown.command(name='user')
     @commands.has_permissions(administrator=True)
@@ -651,7 +651,7 @@ class LockdownCommands(commands.Cog):
         
         if success:
             embed = discord.Embed(
-                title="🔒 User Locked Down",
+                title=" User Locked Down",
                 description=f"{user.mention} has been locked down (invisible)",
                 color=discord.Color.red()
             )
@@ -659,7 +659,7 @@ class LockdownCommands(commands.Cog):
             embed.add_field(name="Unlock", value=f"`!lockdown unlock {user.mention}`", inline=False)
             await ctx.send(embed=embed)
         else:
-            await ctx.send(f"❌ Failed: {message}")
+            await ctx.send(f" Failed: {message}")
     
     @lockdown.command(name='unlock')
     @commands.has_permissions(administrator=True)
@@ -671,13 +671,13 @@ class LockdownCommands(commands.Cog):
         
         if success:
             embed = discord.Embed(
-                title="🔓 User Unlocked",
+                title=" User Unlocked",
                 description=f"{user.mention} has been unlocked",
                 color=discord.Color.green()
             )
             await ctx.send(embed=embed)
         else:
-            await ctx.send(f"❌ Failed: {message}")
+            await ctx.send(f" Failed: {message}")
     
     @lockdown.command(name='auto')
     @commands.has_permissions(administrator=True)
@@ -689,7 +689,7 @@ class LockdownCommands(commands.Cog):
             config.auto_lockdown = True
             await config.save()
             embed = discord.Embed(
-                title="🤖 Auto-Lockdown Enabled",
+                title=" Auto-Lockdown Enabled",
                 description="Raiders will be automatically locked down instead of banned",
                 color=discord.Color.green()
             )
@@ -712,7 +712,7 @@ class LockdownCommands(commands.Cog):
             await ctx.send("No users are currently locked down")
             return
         
-        embed = discord.Embed(title="🔒 Locked Down Users", color=discord.Color.red())
+        embed = discord.Embed(title=" Locked Down Users", color=discord.Color.red())
         users_list = "\n".join([f"<@{uid}>" for uid in config.locked_users])
         embed.add_field(name=f"Total: {len(config.locked_users)}", value=users_list, inline=False)
         await ctx.send(embed=embed)
@@ -725,7 +725,7 @@ class RestoreCommands(commands.Cog):
     @commands.has_permissions(administrator=True)
     async def restore_backup(self, ctx, backup_id: int):
         """Restore server from a backup"""
-        msg = await ctx.send(f"🔄 Restoring backup #{backup_id}...")
+        msg = await ctx.send(f" Restoring backup #{backup_id}...")
         
         try:
             async with aiosqlite.connect('guardian.db') as db:
@@ -736,7 +736,7 @@ class RestoreCommands(commands.Cog):
                     row = await cursor.fetchone()
             
             if not row:
-                await msg.edit(content=f"❌ Backup #{backup_id} not found")
+                await msg.edit(content=f" Backup #{backup_id} not found")
                 return
             
             backup_data = json.loads(row[0])
@@ -784,7 +784,7 @@ class RestoreCommands(commands.Cog):
                         pass
             
             embed = discord.Embed(
-                title="✅ Backup Restored",
+                title=" Backup Restored",
                 description=f"Restored backup #{backup_id}",
                 color=discord.Color.green(),
                 timestamp=datetime.utcnow()
@@ -795,7 +795,7 @@ class RestoreCommands(commands.Cog):
             
             await msg.edit(content=None, embed=embed)
         except Exception as e:
-            await msg.edit(content=f"❌ Restore failed: {str(e)}")
+            await msg.edit(content=f" Restore failed: {str(e)}")
 
 class AdvancedCommands(commands.Cog):
     def __init__(self, bot):
@@ -806,7 +806,7 @@ class AdvancedCommands(commands.Cog):
     async def check_nuke(self, ctx):
         """Check for nuke patterns and vulnerabilities"""
         embed = discord.Embed(
-            title="🔍 Anti-Nuke Check",
+            title=" Anti-Nuke Check",
             description="Scanning for vulnerabilities...",
             color=discord.Color.blue()
         )
@@ -823,7 +823,7 @@ class AdvancedCommands(commands.Cog):
         
         if dangerous_perms:
             embed.add_field(
-                name="⚠️ Dangerous Permissions",
+                name=" Dangerous Permissions",
                 value="\n".join(dangerous_perms[:10]),
                 inline=False
             )
@@ -832,7 +832,7 @@ class AdvancedCommands(commands.Cog):
         unverified_bots = [m for m in ctx.guild.members if m.bot and not m.public_flags.verified_bot]
         if unverified_bots:
             embed.add_field(
-                name="⚠️ Unverified Bots",
+                name=" Unverified Bots",
                 value=f"{len(unverified_bots)} unverified bots detected",
                 inline=True
             )
@@ -840,13 +840,13 @@ class AdvancedCommands(commands.Cog):
         # Recommendations
         recommendations = []
         if len(dangerous_perms) > 5:
-            recommendations.append("• Too many admins - review permissions")
+            recommendations.append("• Too many admins review permissions")
         if unverified_bots:
             recommendations.append("• Remove unverified bots")
         recommendations.append("• Enable auto-lockdown: `!lockdown auto on`")
         recommendations.append("• Create regular backups: `!backup now`")
         
-        embed.add_field(name="💡 Recommendations", value="\n".join(recommendations), inline=False)
+        embed.add_field(name=" Recommendations", value="\n".join(recommendations), inline=False)
         
         await ctx.send(embed=embed)
     
@@ -860,7 +860,7 @@ class AdvancedCommands(commands.Cog):
         
         if success:
             embed = discord.Embed(
-                title="🛡️ User Quarantined",
+                title=" User Quarantined",
                 description=f"{user.mention} has been quarantined",
                 color=discord.Color.orange()
             )
@@ -868,7 +868,7 @@ class AdvancedCommands(commands.Cog):
             embed.add_field(name="Status", value="User is isolated and invisible", inline=False)
             await ctx.send(embed=embed)
         else:
-            await ctx.send(f"❌ Failed: {message}")
+            await ctx.send(f" Failed: {message}")
     
     @commands.command(name='massban')
     @commands.has_permissions(administrator=True)
@@ -878,7 +878,7 @@ class AdvancedCommands(commands.Cog):
             await ctx.send("Usage: `!massban <user_id1> <user_id2> ...`")
             return
         
-        msg = await ctx.send(f"🔨 Mass banning {len(user_ids)} users...")
+        msg = await ctx.send(f" Mass banning {len(user_ids)} users...")
         
         banned = 0
         failed = 0
@@ -892,7 +892,7 @@ class AdvancedCommands(commands.Cog):
                 failed += 1
         
         embed = discord.Embed(
-            title="🔨 Mass Ban Complete",
+            title=" Mass Ban Complete",
             color=discord.Color.red()
         )
         embed.add_field(name="Banned", value=str(banned), inline=True)
@@ -910,7 +910,7 @@ class AdvancedCommands(commands.Cog):
             await ctx.send(f"No members found with role {role.mention}")
             return
         
-        msg = await ctx.send(f"👢 Kicking {len(members_to_kick)} members with {role.mention}...")
+        msg = await ctx.send(f" Kicking {len(members_to_kick)} members with {role.mention}...")
         
         kicked = 0
         for member in members_to_kick:
@@ -920,7 +920,7 @@ class AdvancedCommands(commands.Cog):
             except:
                 pass
         
-        await msg.edit(content=f"✅ Kicked {kicked}/{len(members_to_kick)} members")
+        await msg.edit(content=f" Kicked {kicked}/{len(members_to_kick)} members")
 
 async def setup(bot):
     await bot.add_cog(GuardianCommands(bot))
