@@ -794,6 +794,18 @@ class RestoreCommands(commands.Cog):
             embed.add_field(name="Backup Date", value=backup_data.get('timestamp', 'Unknown'), inline=False)
             
             await msg.edit(content=None, embed=embed)
+            # DM alert users about the restoration
+            from bot import send_alert_dm
+            alert_embed = discord.Embed(
+                title="SERVER RESTORE COMPLETED",
+                description=f"Backup #{backup_id} was restored in **{ctx.guild.name}** by {ctx.author.mention}",
+                color=discord.Color.blurple(),
+                timestamp=datetime.utcnow()
+            )
+            alert_embed.add_field(name="Roles Restored", value=str(roles_restored), inline=True)
+            alert_embed.add_field(name="Channels Restored", value=str(channels_restored), inline=True)
+            await send_alert_dm(ctx.guild, alert_embed, 'restore')
+
         except Exception as e:
             await msg.edit(content=f" Restore failed: {str(e)}")
 
