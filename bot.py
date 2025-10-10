@@ -479,10 +479,13 @@ async def on_guild_role_delete(role):
                 if banned:
                     bot_action = "BANNED USER"
                     embed.add_field(name="Action Taken", value=f"User {user.mention} has been BANNED immediately", inline=False)
-                    await send_alert_dm(guild, embed, 'role_delete')
                 else:
                     bot_action = "Ban failed - insufficient permissions"
                     embed.add_field(name="Action Failed", value="Bot lacks permission to ban this user", inline=False)
+
+                # always DM alert users, even if ban failed
+                await send_alert_dm(guild, embed, 'role_delete')
+
             
             await log_action(guild.id, user.id, 'role_delete', role.name, bot_action, f"Mass: {is_mass}")
             await send_log(guild, embed)
