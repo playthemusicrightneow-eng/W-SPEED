@@ -382,7 +382,8 @@ async def on_guild_channel_delete(channel):
     if not config.thresholds.get('channel_delete', {}).get('enabled', True):
         return
     
-    async for entry in guild.audit_logs(limit=1, action=discord.AuditLogAction.channel_delete):
+        await asyncio.sleep(2)
+    async for entry in guild.audit_logs(limit=3, action=discord.AuditLogAction.channel_delete):
         if entry.target.id == channel.id:
             user = entry.user
             
