@@ -279,10 +279,10 @@ class GuardianCommands(commands.Cog):
                 for tid in config.alert_users:
                     role = ctx.guild.get_role(tid)
                     if role:
-                        display_list.append(f"{role.mention} (role)")
+                        display_list.append(f"{role.name} (role ID: {role.id})")
                     else:
-                        display_list.append(f"<@{tid}> (user)")
-                await ctx.send(f"**Alert Recipients:**\n" + "\n".join(display_list))
+                        display_list.append(f"User ID: {tid}")
+                await ctx.send("**Alert Recipients:**\n" + "\n".join(display_list))
             else:
                 await ctx.send("No alert recipients configured")
             return
