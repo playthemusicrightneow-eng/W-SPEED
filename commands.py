@@ -262,37 +262,46 @@ class GuardianCommands(commands.Cog):
     
     @guard.command(name='alerts')
     @commands.has_permissions(administrator=True)
-    async def manage_alerts(self, ctx, action: str = None, user: discord.User = None):
-        """Manage users who receive DM alerts
+    async def manage_alerts(self, ctx, action: str = None, target: discord.Role | discord.User = None):
+        """Manage alert recipients (users or roles)
         Usage: 
-        !guard alerts - Show current alert users
-        !guard alerts add @user - Add user to alert list
-        !guard alerts remove @user - Remove user from alert list
+        !guard alerts - Show current alert users/roles
+        !guard alerts add @user - Add user to alerts
+        !guard alerts add @Role - Add role to alerts
+        !guard alerts remove @user - Remove user from alerts
+        !guard alerts remove @Role - Remove role from alerts
         """
         config = await self.get_config(ctx.guild.id)
-        
+    
         if action is None:
             if config.alert_users:
-                users_list = "\n".join([f"<@{uid}>" for uid in config.alert_users])
-                await ctx.send(f"**Alert Users (receive DMs on raids):**\n{users_list}")
+                display_list = []
+                for tid in config.alert_users:
+                    role = ctx.guild.get_role(tid)
+                    if role:
+                        display_list.append(f"{role.mention} (role)")
+                    else:
+                        display_list.append(f"<@{tid}> (user)")
+                await ctx.send(f"**Alert Recipients:**\n" + "\n".join(display_list))
             else:
-                await ctx.send("No alert users configured")
+                await ctx.send("No alert recipients configured")
             return
-        
-        if user is None:
-            await ctx.send("Please mention a user")
+    
+        if target is None:
+            await ctx.send("Please mention a user or role")
             return
-        
+
         if action.lower() == 'add':
-            config.alert_users.add(user.id)
+            config.alert_users.add(target.id)
             await config.save()
-            await ctx.send(f"Added {user.mention} to alert list - they will receive DMs on raid detection")
+            await ctx.send(f" Added {target.mention} to alert list")
         elif action.lower() == 'remove':
-            config.alert_users.discard(user.id)
+            config.alert_users.discard(target.id)
             await config.save()
-            await ctx.send(f"Removed {user.mention} from alert list")
+            await ctx.send(f" Removed {target.mention} from alert list")
         else:
-            await ctx.send("Use 'add' or 'remove'")
+            await ctx.send("Use `add` or `remove`")
+
     
     @guard.command(name='exempt')
     async def exempt_user(self, ctx, action: str = None, user: discord.User = None):
