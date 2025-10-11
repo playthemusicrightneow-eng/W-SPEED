@@ -52,11 +52,29 @@ class GuardianCommands(commands.Cog):
     @guard.command(name='logs')
     @commands.has_permissions(administrator=True)
     async def set_logs(self, ctx, channel: discord.TextChannel):
-        """Set the log channel"""
+        """Set or update the log channel"""
         config = await self.get_config(ctx.guild.id)
+
+        # If it's already set to the same channel, tell them
+        if config.log_channel_id == channel.id:
+            await ctx.send(f" Logs are already set to {channel.mention}")
+            return
+
+        # Update it
+        old_channel = ctx.guild.get_channel(config.log_channel_id) if config.log_channel_id else None
         config.log_channel_id = channel.id
         await config.save()
-        await ctx.send(f"Log channel set to {channel.mention}")
+
+        # Update in-memory cache immediately
+        from bot import configs
+        configs[ctx.guild.id] = config
+
+        # Confirm to user
+        if old_channel:
+            await ctx.send(f" Log channel updated from {old_channel.mention} to {channel.mention}")
+        else:
+            await ctx.send(f" Log channel set to {channel.mention}")
+
     
     @guard.command(name='config')
     @commands.has_permissions(administrator=True)
