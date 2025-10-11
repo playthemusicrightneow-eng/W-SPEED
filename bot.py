@@ -462,6 +462,8 @@ async def on_guild_role_delete(role):
     
     if not config.thresholds.get('role_delete', {}).get('enabled', True):
         return
+
+    await asyncio.sleep(2)
     
     async for entry in guild.audit_logs(limit=1, action=discord.AuditLogAction.role_delete):
         if entry.target.id == role.id:
