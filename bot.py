@@ -376,10 +376,11 @@ async def unlock_user(guild, user):
 
 @bot.event
 async def on_ready():
-    await init_db()
-    await load_extensions()  # <-- Add this line
-    print(f'Guardian Bot is ready! Logged in as {bot.user.name} ({bot.user.id})')
-    print(f'Protecting {len(bot.guilds)} servers')
+    # on_ready may fire multiple times during reconnects, so avoid loading extensions here
+    import os
+    print(f"[DEBUG] PID={os.getpid()} Ready as {bot.user} ({bot.user.id}) — guilds={len(bot.guilds)}")
+    print("[DEBUG] loaded extensions:", list(bot.extensions.keys()))
+    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="for raids and nukes"))
 
 @bot.event
 async def on_guild_channel_delete(channel):
@@ -625,6 +626,18 @@ keep_alive()
 import asyncio
 
 async def main():
+    # initialize DB once
+    await init_db()
+
+    # load extension exactly once before connecting
+    if 'commands' not in bot.extensions:
+        try:
+            await bot.load_extension('commands')
+            print("[DEBUG] Loaded extension: commands")
+        except Exception as e:
+            print(f"[ERROR] Failed to load extension 'commands': {e}")
+
+    # start bot
     await bot.start(os.getenv("TOKEN"))
 
 if __name__ == "__main__":
