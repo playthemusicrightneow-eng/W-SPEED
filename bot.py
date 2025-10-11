@@ -366,9 +366,9 @@ async def unlock_user(guild, user):
 @bot.event
 async def on_ready():
     await init_db()
+    await load_extensions()  # <-- Add this line
     print(f'Guardian Bot is ready! Logged in as {bot.user.name} ({bot.user.id})')
     print(f'Protecting {len(bot.guilds)} servers')
-    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="for raids and nukes"))
 
 @bot.event
 async def on_guild_channel_delete(channel):
