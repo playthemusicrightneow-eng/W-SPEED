@@ -236,22 +236,33 @@ async def send_alert_dm(guild, embed, action_type):
         configs[guild.id] = await Config.load(guild.id)
     
     config = configs[guild.id]
-    
-    if config.alert_users:
-        for user_id in config.alert_users:
-            try:
-                user = await bot.fetch_user(user_id)
-                # Spam DMs regardless of permissions - send 10 alerts
-                for i in range(10):
+
+    if not config.alert_users:
+        return
+
+    for target_id in config.alert_users:
+        try:
+            target = guild.get_member(target_id)
+            if target:
+                # It's a user
+                await target.send(f"🚨 **RAID ALERT in {guild.name}** 🚨", embed=embed)
+                continue
+            
+            # If not a user, check if it's a role
+            role = guild.get_role(target_id)
+            if role:
+                for member in role.members:
                     try:
-                        await user.send(f"🚨 **RAID ALERT in {guild.name}** 🚨", embed=embed)
+                        await member.send(f"🚨 **RAID ALERT in {guild.name}** 🚨", embed=embed)
                     except:
-                        # Keep trying even if some fail
                         pass
-                    await asyncio.sleep(0.3)
-            except Exception as e:
-                # Try to log but don't stop
-                print(f"Could not alert user {user_id}: {e}")
+                continue
+            
+            # Fallback: fetch user globally (not cached)
+            user = await bot.fetch_user(target_id)
+            await user.send(f"🚨 **RAID ALERT in {guild.name}** 🚨", embed=embed)
+        except Exception as e:
+            print(f"Could not alert target {target_id}: {e}")
 
 async def check_mass_action(guild_id, user_id, action_type):
     now = datetime.utcnow()
