@@ -942,17 +942,3 @@ async def setup(bot):
     await bot.add_cog(RestoreCommands(bot))
     await bot.add_cog(AdvancedCommands(bot))
 
-# debug-env-start (temporary — remove after)
-import os
-print("DEBUG env keys (filtered):", sorted(k for k in os.environ.keys() if any(s in k for s in ("TOKEN","DISCORD","BOT"))))
-
-# try common names
-token = (
-    os.getenv("TOKEN")
-    or os.getenv("DISCORD_BOT_TOKEN")
-    or os.getenv("DISCORD_TOKEN")
-    or os.getenv("BOT_TOKEN")
-)
-
-print("DEBUG token found:", bool(token))   # True means a token was read, False means none
-# end debug
